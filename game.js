@@ -7,6 +7,7 @@ const CELL = 60;
 const VISIBLE_ROWS = 12;
 const PLAYER_START_COL = Math.floor(COLS / 2);
 const PLAYER_START_ROW = 2;
+const MAX_SAFE_GAP = 2;
 
 const COLORS = {
   grass: '#365f35',
@@ -25,6 +26,8 @@ const state = {
   runPositions: [],
   ghosts: [],
   hesitation: { streak: 0, moveRate: 1 },
+  elapsedMs: 0,
+  lastFrameTime: null,
 };
 
 function createLane(type, speed, density) {
@@ -36,7 +39,7 @@ function generateLane() {
   if (roll < 0.3) return createLane('grass', 0, 0);
   if (roll < 0.7) {
     const speed = (Math.random() * 0.7 + 0.55) * (Math.random() < 0.5 ? -1 : 1);
-    return createLane('road', speed, 0.11 + Math.random() * 0.09);
+    return createLane('road', speed, 0.14 + Math.random() * 0.1);
   }
   const speed = (Math.random() * 0.45 + 0.28) * (Math.random() < 0.5 ? -1 : 1);
   return createLane('river', speed, 0.12 + Math.random() * 0.1);
@@ -45,6 +48,12 @@ function generateLane() {
 function ensureLanes() {
   while (state.lanes.length < state.laneCursor + VISIBLE_ROWS + 10) {
     state.lanes.push(generateLane());
+  }
+}
+
+function ensureSafeStartPlatform() {
+  for (let i = 0; i <= PLAYER_START_ROW + 1; i += 1) {
+    state.lanes[i] = createLane('grass', 0, 0);
   }
 }
 
@@ -57,24 +66,24 @@ function difficultyFactor() {
 function progressionFactor() {
   // Gradual systemic ramp by score + survival time.
   const fromScore = Math.min(0.45, state.score * 0.012);
-  const fromTime = Math.min(0.35, state.tick * 0.00035);
+  const fromTime = Math.min(0.35, state.elapsedMs / 35000);
   return 1 + fromScore + fromTime;
 }
 
-function spawnObstacle(laneIndex) {
+function spawnObstacle(laneIndex, forcedX = null, ignoreCap = false) {
   const lane = state.lanes[laneIndex];
   if (!lane || lane.type === 'grass') return;
 
   const existingInLane = state.obstacles.filter((obs) => obs.laneIndex === laneIndex).length;
-  if (existingInLane >= 2) return;
+  if (!ignoreCap && existingInLane >= 3) return;
 
   const adaptive = difficultyFactor();
   const progression = progressionFactor();
-  if (Math.random() > lane.density * adaptive * progression) return;
+  if (forcedX === null && Math.random() > lane.density * adaptive * progression) return;
 
-  const direction = Math.sign(lane.speed);
-  const x = direction >= 0 ? -1.2 : COLS + 1.2;
-  const width = lane.type === 'road' ? 0.85 + Math.random() * 0.25 : 1.1 + Math.random() * 0.35;
+  const direction = Math.sign(lane.speed) || 1;
+  const x = forcedX ?? (direction >= 0 ? -1.2 : COLS + 1.2);
+  const width = lane.type === 'road' ? 0.9 + Math.random() * 0.25 : 1.1 + Math.random() * 0.35;
   const speed = lane.speed * adaptive * progression;
 
   state.obstacles.push({
@@ -86,21 +95,52 @@ function spawnObstacle(laneIndex) {
   });
 }
 
+function enforceRoadGapLimit(laneIndex) {
+  const lane = state.lanes[laneIndex];
+  if (!lane || lane.type !== 'road') return;
+
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    const cars = state.obstacles
+      .filter((obs) => obs.laneIndex === laneIndex && obs.type === 'car')
+      .map((obs) => ({ start: obs.x, end: obs.x + obs.width }))
+      .filter((seg) => seg.end > 0 && seg.start < COLS)
+      .sort((a, b) => a.start - b.start);
+
+    const gaps = [];
+    let cursor = 0;
+    cars.forEach((seg) => {
+      if (seg.start > cursor) gaps.push({ start: cursor, end: seg.start });
+      cursor = Math.max(cursor, seg.end);
+    });
+    if (cursor < COLS) gaps.push({ start: cursor, end: COLS });
+
+    const wideGap = gaps.find((gap) => gap.end - gap.start > MAX_SAFE_GAP);
+    if (!wideGap) return;
+
+    const center = wideGap.start + (wideGap.end - wideGap.start) / 2;
+    const forcedX = Math.max(0, Math.min(COLS - 1.05, center - 0.5));
+    spawnObstacle(laneIndex, forcedX, true);
+  }
+}
+
 function updateObstacles() {
   const low = state.laneCursor - 2;
   const high = state.laneCursor + VISIBLE_ROWS + 2;
 
   for (let laneIdx = low; laneIdx <= high; laneIdx += 1) {
-    if (Math.random() < 0.16) spawnObstacle(laneIdx);
+    if (Math.random() < 0.2) spawnObstacle(laneIdx);
   }
 
   state.obstacles.forEach((obs) => {
     obs.x += obs.speed * 0.05;
   });
 
+  for (let laneIdx = low; laneIdx <= high; laneIdx += 1) {
+    enforceRoadGapLimit(laneIdx);
+  }
+
   state.obstacles = state.obstacles.filter((obs) => obs.x > -3 && obs.x < COLS + 3);
 }
-
 
 function checkCollision() {
   if (!state.player.alive) return;
@@ -121,10 +161,10 @@ function recordRunStep() {
 }
 
 function updateGhosts() {
-  state.ghosts = state.runs.slice(-3).map((run, idx) => {
-    const step = run[state.tick % run.length];
-    return { ...step, alpha: 0.22 + idx * 0.2 };
-  });
+  state.ghosts = state.runs.slice(-8).map((run, idx) => ({
+    run,
+    alpha: 0.16 + idx * 0.12,
+  }));
 }
 
 function playerMove(dx, dy) {
@@ -148,17 +188,21 @@ function updateHesitation(movedForward) {
 }
 
 function resetRun() {
-  if (state.runPositions.length > 20) {
+  if (state.runPositions.length > 6) {
     state.runs.push(state.runPositions);
+    if (state.runs.length > 8) state.runs.shift();
   }
   state.player = { col: PLAYER_START_COL, row: PLAYER_START_ROW, alive: true };
   state.obstacles = [];
   state.tick = 0;
   state.score = 0;
+  state.elapsedMs = 0;
+  state.lastFrameTime = null;
   state.runPositions = [];
   state.hesitation = { streak: 0, moveRate: 1 };
   updateCamera();
   ensureLanes();
+  ensureSafeStartPlatform();
 }
 
 window.addEventListener('keydown', (event) => {
@@ -204,13 +248,21 @@ function drawObstacles() {
 }
 
 function drawGhosts() {
-  state.ghosts.forEach((ghost) => {
-    const y = canvas.height - (ghost.row - state.laneCursor + 0.5) * CELL;
-    if (y < -CELL || y > canvas.height) return;
-    ctx.fillStyle = `rgba(143, 201, 255, ${ghost.alpha})`;
-    ctx.beginPath();
-    ctx.arc((ghost.col + 0.5) * CELL, y, 14, 0, Math.PI * 2);
-    ctx.fill();
+  state.ghosts.forEach((ghostRun) => {
+    const { run, alpha } = ghostRun;
+    if (run.length === 0) return;
+
+    for (let i = 0; i < 40; i += 1) {
+      const idx = (state.tick - i + run.length * 10) % run.length;
+      const ghost = run[idx];
+      const y = canvas.height - (ghost.row - state.laneCursor + 0.5) * CELL;
+      if (y < -CELL || y > canvas.height) continue;
+      const trailAlpha = alpha * (1 - i / 45);
+      ctx.fillStyle = `rgba(143, 201, 255, ${trailAlpha})`;
+      ctx.beginPath();
+      ctx.arc((ghost.col + 0.5) * CELL, y, i === 0 ? 12 : 7, 0, Math.PI * 2);
+      ctx.fill();
+    }
   });
 }
 
@@ -220,6 +272,13 @@ function drawPlayer() {
   ctx.beginPath();
   ctx.arc((state.player.col + 0.5) * CELL, y, 16, 0, Math.PI * 2);
   ctx.fill();
+}
+
+function formatTime(ms) {
+  const totalSeconds = Math.floor(ms / 1000);
+  const minutes = Math.floor(totalSeconds / 60).toString().padStart(2, '0');
+  const seconds = (totalSeconds % 60).toString().padStart(2, '0');
+  return `${minutes}:${seconds}`;
 }
 
 function render() {
@@ -237,14 +296,24 @@ function render() {
   drawPlayer();
 
   const adaptiveLevel = ((difficultyFactor() - 1) * 100).toFixed(0);
+  const timerText = formatTime(state.elapsedMs);
   hud.textContent = state.player.alive
-    ? `Score ${state.score} · Echoes ${state.runs.length} · Adaptive pressure +${adaptiveLevel}%`
-    : `You failed. Press R to restart instantly. Score ${state.score}`;
+    ? `Score ${state.score} · Time ${timerText} · Echoes ${state.runs.length} · Adaptive +${adaptiveLevel}%`
+    : `You failed. Press R to restart instantly. Score ${state.score} · Time ${timerText}`;
 }
 
-function step() {
+function step(timestamp) {
+  if (state.lastFrameTime === null) state.lastFrameTime = timestamp;
+  const delta = Math.min(50, timestamp - state.lastFrameTime);
+  state.lastFrameTime = timestamp;
+
+  if (state.player.alive) {
+    state.elapsedMs += delta;
+  }
+
   state.tick += 1;
   ensureLanes();
+  ensureSafeStartPlatform();
   updateCamera();
 
   if (state.player.alive) {
@@ -259,4 +328,4 @@ function step() {
 }
 
 resetRun();
-step();
+requestAnimationFrame(step);
