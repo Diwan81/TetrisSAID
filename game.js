@@ -5,6 +5,7 @@ const scoreEl = document.getElementById("score");
 const linesEl = document.getElementById("lines");
 const raidersEl = document.getElementById("raiders");
 const hullEl = document.getElementById("hull");
+const statusEl = document.getElementById("status");
 const restartBtn = document.getElementById("restart");
 
 const COLS = 10;
@@ -45,7 +46,8 @@ const state = {
   dropMs: 500,
   enemyTimer: 0,
   enemyEvery: 1400,
-  fireCooldown: 0
+  fireCooldown: 0,
+  gameOverReason: ""
 };
 
 function makeBoard() {
@@ -141,6 +143,7 @@ function settlePieceAndSpawnNext() {
   state.active = randomPiece();
   if (collides(state.active)) {
     state.gameOver = true;
+    state.gameOverReason = "Top-out: no space for the next piece.";
   }
 }
 
@@ -261,6 +264,7 @@ function updateEnemies(deltaMs) {
 
   if (state.hull <= 0) {
     state.gameOver = true;
+    state.gameOverReason = "Hull depleted: raiders breached your defenses.";
   }
 }
 
@@ -327,7 +331,10 @@ function drawBoard() {
     ctx.fillText("RUN FAILED", canvas.width / 2, canvas.height / 2 - 12);
     ctx.fillStyle = "#d8e2ff";
     ctx.font = "20px Trebuchet MS";
-    ctx.fillText("Hit Restart to drop again", canvas.width / 2, canvas.height / 2 + 28);
+    const reason = state.gameOverReason || "Run ended.";
+    ctx.fillText(reason, canvas.width / 2, canvas.height / 2 + 20);
+    ctx.font = "18px Trebuchet MS";
+    ctx.fillText("Hit Restart to drop again", canvas.width / 2, canvas.height / 2 + 52);
   }
 }
 
@@ -336,6 +343,16 @@ function updateHud() {
   linesEl.textContent = state.lines;
   raidersEl.textContent = state.raidersDestroyed;
   hullEl.textContent = Math.max(0, state.hull);
+  if (state.gameOver) {
+    statusEl.textContent = `Status: ${state.gameOverReason}`;
+    return;
+  }
+
+  if (state.hull <= 2) {
+    statusEl.textContent = "Status: Critical hull! Keep raiders off your stack.";
+  } else {
+    statusEl.textContent = "Status: Hold the line.";
+  }
 }
 
 function update(timestamp) {
@@ -386,6 +403,7 @@ function reset() {
   state.enemyTimer = 0;
   state.enemyEvery = 1400;
   state.fireCooldown = 0;
+  state.gameOverReason = "";
   state.lastFrame = 0;
   updateHud();
 }

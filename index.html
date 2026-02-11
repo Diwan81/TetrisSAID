@@ -21,10 +21,16 @@
           <li>Drop: <kbd>↓</kbd></li>
           <li>Fire: <kbd>Space</kbd></li>
         </ul>
+        <h3>Fail State</h3>
+        <ul>
+          <li><strong>Hull reaches 0</strong>: raiders hit your stack or breach the bottom line.</li>
+          <li><strong>Top-out</strong>: a new tetromino cannot spawn because the board is jammed.</li>
+        </ul>
         <div class="stat"><span>Score</span><strong id="score">0</strong></div>
         <div class="stat"><span>Lines</span><strong id="lines">0</strong></div>
         <div class="stat"><span>Raiders</span><strong id="raiders">0</strong></div>
         <div class="stat"><span>Hull</span><strong id="hull">5</strong></div>
+        <p id="status" class="status">Status: Hold the line.</p>
         <button id="restart">Restart Run</button>
       </aside>
     </main>
