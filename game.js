@@ -28,6 +28,7 @@ const state = {
   hesitation: { streak: 0, moveRate: 1 },
   elapsedMs: 0,
   lastFrameTime: null,
+  runArchived: false,
 };
 
 function createLane(type, speed, density) {
@@ -89,10 +90,11 @@ function spawnObstacle(laneIndex, forcedX = null, ignoreCap = false) {
   const speed = lane.speed * adaptive * progression;
 
   if (lane.type === 'road') {
+    const laneVariance = Math.random() * 0.8;
+    const minDistance = 0.75 + laneVariance;
     const tooClose = state.obstacles
       .filter((obs) => obs.laneIndex === laneIndex && obs.type === 'car')
       .some((obs) => {
-        const minDistance = 1.2;
         const newCenter = x + width / 2;
         const existingCenter = obs.x + obs.width / 2;
         return Math.abs(newCenter - existingCenter) < minDistance;
@@ -167,7 +169,17 @@ function checkCollision() {
 
   if (hitMovingObject) {
     state.player.alive = false;
+    archiveCurrentRun();
   }
+}
+
+function archiveCurrentRun() {
+  if (state.runArchived) return;
+  if (state.runPositions.length > 6) {
+    state.runs.push(state.runPositions.slice());
+    if (state.runs.length > 8) state.runs.shift();
+  }
+  state.runArchived = true;
 }
 
 function recordRunStep() {
@@ -202,10 +214,7 @@ function updateHesitation(movedForward) {
 }
 
 function resetRun() {
-  if (state.runPositions.length > 6) {
-    state.runs.push(state.runPositions);
-    if (state.runs.length > 8) state.runs.shift();
-  }
+  archiveCurrentRun();
   state.player = { col: PLAYER_START_COL, row: PLAYER_START_ROW, alive: true };
   state.obstacles = [];
   state.tick = 0;
@@ -213,6 +222,7 @@ function resetRun() {
   state.elapsedMs = 0;
   state.lastFrameTime = null;
   state.runPositions = [];
+  state.runArchived = false;
   state.hesitation = { streak: 0, moveRate: 1 };
   updateCamera();
   ensureLanes();
@@ -313,7 +323,7 @@ function render() {
   const timerText = formatTime(state.elapsedMs);
   hud.textContent = state.player.alive
     ? `Score ${state.score} · Time ${timerText} · Echoes ${state.runs.length} · Adaptive +${adaptiveLevel}%`
-    : `You failed. Press R to restart instantly. Score ${state.score} · Time ${timerText}`;
+    : `You failed. Press R to restart instantly. Score ${state.score} · Time ${timerText} · Echoes running`;
 }
 
 function step(timestamp) {
@@ -330,8 +340,8 @@ function step(timestamp) {
   ensureSafeStartPlatform();
   updateCamera();
 
+  updateObstacles();
   if (state.player.alive) {
-    updateObstacles();
     checkCollision();
     recordRunStep();
   }
