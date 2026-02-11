@@ -90,33 +90,18 @@ function updateObstacles() {
   state.obstacles = state.obstacles.filter((obs) => obs.x > -3 && obs.x < COLS + 3);
 }
 
-function laneAtPlayer() {
-  return state.lanes[state.player.row];
-}
 
 function checkCollision() {
-  const lane = laneAtPlayer();
-  if (!lane || !state.player.alive) return;
+  if (!state.player.alive) return;
 
   const relevant = state.obstacles.filter((obs) => obs.laneIndex === state.player.row);
   const col = state.player.col;
+  const hitMovingObject = relevant.some(
+    (obs) => col > obs.x - 0.45 && col < obs.x + obs.width - 0.15,
+  );
 
-  if (lane.type === 'road') {
-    const hit = relevant.some((obs) => col > obs.x - 0.45 && col < obs.x + obs.width - 0.15);
-    if (hit) state.player.alive = false;
-    return;
-  }
-
-  if (lane.type === 'river') {
-    const carryingLog = relevant.find((obs) => col > obs.x - 0.4 && col < obs.x + obs.width - 0.2);
-    if (!carryingLog) {
-      state.player.alive = false;
-      return;
-    }
-    state.player.col += carryingLog.speed * 0.05;
-    if (state.player.col < 0 || state.player.col > COLS - 1) {
-      state.player.alive = false;
-    }
+  if (hitMovingObject) {
+    state.player.alive = false;
   }
 }
 
