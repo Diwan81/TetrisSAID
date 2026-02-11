@@ -7,7 +7,7 @@ const CELL = 60;
 const VISIBLE_ROWS = 12;
 const PLAYER_START_COL = Math.floor(COLS / 2);
 const PLAYER_START_ROW = 2;
-const MAX_SAFE_GAP = 2;
+const MAX_SAFE_GAP = 3;
 
 const COLORS = {
   grass: '#365f35',
@@ -38,7 +38,7 @@ function generateLane() {
   const roll = Math.random();
   if (roll < 0.3) return createLane('grass', 0, 0);
   if (roll < 0.7) {
-    const speed = (Math.random() * 0.7 + 0.55) * (Math.random() < 0.5 ? -1 : 1);
+    const speed = (Math.random() * 0.45 + 0.38) * (Math.random() < 0.5 ? -1 : 1);
     return createLane('road', speed, 0.14 + Math.random() * 0.1);
   }
   const speed = (Math.random() * 0.45 + 0.28) * (Math.random() < 0.5 ? -1 : 1);
@@ -60,13 +60,13 @@ function ensureSafeStartPlatform() {
 function difficultyFactor() {
   // Adaptive AI: hesitation slightly amplifies spawn chance and speed.
   const h = Math.min(1, state.hesitation.streak / 24);
-  return 1 + h * 0.2;
+  return 1 + h * 0.12;
 }
 
 function progressionFactor() {
   // Gradual systemic ramp by score + survival time.
-  const fromScore = Math.min(0.45, state.score * 0.012);
-  const fromTime = Math.min(0.35, state.elapsedMs / 35000);
+  const fromScore = Math.min(0.28, state.score * 0.008);
+  const fromTime = Math.min(0.2, state.elapsedMs / 50000);
   return 1 + fromScore + fromTime;
 }
 
@@ -75,7 +75,7 @@ function spawnObstacle(laneIndex, forcedX = null, ignoreCap = false) {
   if (!lane || lane.type === 'grass') return;
 
   const existingInLane = state.obstacles.filter((obs) => obs.laneIndex === laneIndex).length;
-  if (!ignoreCap && existingInLane >= 3) return;
+  if (!ignoreCap && existingInLane >= 2) return;
 
   const adaptive = difficultyFactor();
   const progression = progressionFactor();
@@ -83,8 +83,20 @@ function spawnObstacle(laneIndex, forcedX = null, ignoreCap = false) {
 
   const direction = Math.sign(lane.speed) || 1;
   const x = forcedX ?? (direction >= 0 ? -1.2 : COLS + 1.2);
-  const width = lane.type === 'road' ? 0.9 + Math.random() * 0.25 : 1.1 + Math.random() * 0.35;
+  const width = lane.type === 'road' ? 0.75 + Math.random() * 0.2 : 1.05 + Math.random() * 0.3;
   const speed = lane.speed * adaptive * progression;
+
+  if (lane.type === 'road') {
+    const tooClose = state.obstacles
+      .filter((obs) => obs.laneIndex === laneIndex && obs.type === 'car')
+      .some((obs) => {
+        const minDistance = 1.2;
+        const newCenter = x + width / 2;
+        const existingCenter = obs.x + obs.width / 2;
+        return Math.abs(newCenter - existingCenter) < minDistance;
+      });
+    if (tooClose) return;
+  }
 
   state.obstacles.push({
     laneIndex,
@@ -128,7 +140,7 @@ function updateObstacles() {
   const high = state.laneCursor + VISIBLE_ROWS + 2;
 
   for (let laneIdx = low; laneIdx <= high; laneIdx += 1) {
-    if (Math.random() < 0.2) spawnObstacle(laneIdx);
+    if (Math.random() < 0.14) spawnObstacle(laneIdx);
   }
 
   state.obstacles.forEach((obs) => {
