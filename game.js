@@ -35,11 +35,11 @@ function generateLane() {
   const roll = Math.random();
   if (roll < 0.3) return createLane('grass', 0, 0);
   if (roll < 0.7) {
-    const speed = (Math.random() * 1.4 + 0.8) * (Math.random() < 0.5 ? -1 : 1);
-    return createLane('road', speed, 0.2 + Math.random() * 0.18);
+    const speed = (Math.random() * 0.7 + 0.55) * (Math.random() < 0.5 ? -1 : 1);
+    return createLane('road', speed, 0.11 + Math.random() * 0.09);
   }
-  const speed = (Math.random() * 0.6 + 0.4) * (Math.random() < 0.5 ? -1 : 1);
-  return createLane('river', speed, 0.26 + Math.random() * 0.14);
+  const speed = (Math.random() * 0.45 + 0.28) * (Math.random() < 0.5 ? -1 : 1);
+  return createLane('river', speed, 0.12 + Math.random() * 0.1);
 }
 
 function ensureLanes() {
@@ -51,20 +51,31 @@ function ensureLanes() {
 function difficultyFactor() {
   // Adaptive AI: hesitation slightly amplifies spawn chance and speed.
   const h = Math.min(1, state.hesitation.streak / 24);
-  return 1 + h * 0.35;
+  return 1 + h * 0.2;
+}
+
+function progressionFactor() {
+  // Gradual systemic ramp by score + survival time.
+  const fromScore = Math.min(0.45, state.score * 0.012);
+  const fromTime = Math.min(0.35, state.tick * 0.00035);
+  return 1 + fromScore + fromTime;
 }
 
 function spawnObstacle(laneIndex) {
   const lane = state.lanes[laneIndex];
   if (!lane || lane.type === 'grass') return;
 
+  const existingInLane = state.obstacles.filter((obs) => obs.laneIndex === laneIndex).length;
+  if (existingInLane >= 2) return;
+
   const adaptive = difficultyFactor();
-  if (Math.random() > lane.density * adaptive) return;
+  const progression = progressionFactor();
+  if (Math.random() > lane.density * adaptive * progression) return;
 
   const direction = Math.sign(lane.speed);
   const x = direction >= 0 ? -1.2 : COLS + 1.2;
-  const width = lane.type === 'road' ? 1.2 : 1.8;
-  const speed = lane.speed * adaptive;
+  const width = lane.type === 'road' ? 0.85 + Math.random() * 0.25 : 1.1 + Math.random() * 0.35;
+  const speed = lane.speed * adaptive * progression;
 
   state.obstacles.push({
     laneIndex,
@@ -80,7 +91,7 @@ function updateObstacles() {
   const high = state.laneCursor + VISIBLE_ROWS + 2;
 
   for (let laneIdx = low; laneIdx <= high; laneIdx += 1) {
-    if (Math.random() < 0.25) spawnObstacle(laneIdx);
+    if (Math.random() < 0.16) spawnObstacle(laneIdx);
   }
 
   state.obstacles.forEach((obs) => {
