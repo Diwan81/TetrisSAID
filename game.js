@@ -82,7 +82,9 @@ function spawnObstacle(laneIndex, forcedX = null, ignoreCap = false) {
   if (forcedX === null && Math.random() > lane.density * adaptive * progression) return;
 
   const direction = Math.sign(lane.speed) || 1;
-  const x = forcedX ?? (direction >= 0 ? -1.2 : COLS + 1.2);
+  // Cars should always enter from lane edges for consistent readability.
+  const edgeSpawnX = direction >= 0 ? -1.2 : COLS + 1.2;
+  const x = lane.type === 'road' ? edgeSpawnX : (forcedX ?? edgeSpawnX);
   const width = lane.type === 'road' ? 0.75 + Math.random() * 0.2 : 1.05 + Math.random() * 0.3;
   const speed = lane.speed * adaptive * progression;
 
