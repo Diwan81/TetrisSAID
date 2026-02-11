@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Smash Stacker</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="layout">
+      <section class="panel game-panel">
+        <h1>SMASH STACKER</h1>
+        <canvas id="game" width="360" height="720" aria-label="Tetris style game board"></canvas>
+      </section>
+      <aside class="panel ui-panel">
+        <h2>Mission Feed</h2>
+        <p>A neon arena where tetrominoes drop while raiders push in from the edges.</p>
+        <ul>
+          <li>Move: <kbd>←</kbd> <kbd>→</kbd></li>
+          <li>Rotate: <kbd>↑</kbd></li>
+          <li>Drop: <kbd>↓</kbd></li>
+          <li>Fire: <kbd>Space</kbd></li>
+        </ul>
+        <div class="stat"><span>Score</span><strong id="score">0</strong></div>
+        <div class="stat"><span>Lines</span><strong id="lines">0</strong></div>
+        <div class="stat"><span>Raiders</span><strong id="raiders">0</strong></div>
+        <div class="stat"><span>Hull</span><strong id="hull">5</strong></div>
+        <button id="restart">Restart Run</button>
+      </aside>
+    </main>
+    <script src="game.js"></script>
+  </body>
+</html>
